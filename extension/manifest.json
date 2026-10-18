@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Secure Session Launcher",
+  "short_name": "Session Launcher",
+  "description": "Open portal applications in their own windows, switch user cleanly, run parallel sessions in incognito and clean up at sign-out.",
+  "version": "1.0.2",
+  "incognito": "spanning",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Secure Session Launcher",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "tabs",
+    "cookies",
+    "storage",
+    "scripting",
+    "browsingData"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "storage": {
+    "managed_schema": "schema.json"
+  },
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

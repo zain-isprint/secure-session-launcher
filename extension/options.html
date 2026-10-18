@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Secure Session Launcher</title>
+  <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+  <div class="panel">
+    <div class="eyebrow"><img src="icons/icon32.png" alt="">Secure Session Launcher <span id="version" class="muted"></span></div>
+    <h1>Approved portals</h1>
+    <p class="muted">Sites that may open, close and clean up application windows with this extension. Remove a site to make it
+      ask again.</p>
+    <table>
+      <thead><tr><th>Site</th><th>Approved by</th><th></th></tr></thead>
+      <tbody id="sites"></tbody>
+    </table>
+
+    <h2>Settings</h2>
+    <table>
+      <tbody>
+        <tr><td>Incognito</td><td id="incognito"></td></tr>
+        <tr><td>When an application is already open (default)</td><td id="ifOpen"></td></tr>
+        <tr><td>Open applications in (default)</td><td id="windowMode"></td></tr>
+      </tbody>
+    </table>
+    <p class="muted">Defaults apply when a portal does not choose, and can be set by your organisation. Turn incognito on or off in
+      chrome://extensions, under this extension's Details ("Allow in Incognito").</p>
+    <div id="error" class="error" hidden></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

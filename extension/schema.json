@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "approvedPortals": {
+      "title": "Approved portals",
+      "description": "Origins (scheme, host and port) whose pages may use the extension without asking the user, e.g. https://portal.example.com.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "defaultIfOpen": {
+      "title": "When the application is already open",
+      "description": "Used when a launch request does not say: 'ask' shows the confirmation page; 'close' closes the open window and continues.",
+      "type": "string",
+      "enum": ["ask", "close"]
+    },
+    "defaultWindow": {
+      "title": "Window to open applications in",
+      "description": "Used when a launch request does not say: 'normal' or 'incognito'.",
+      "type": "string",
+      "enum": ["normal", "incognito"]
+    }
+  }
+}

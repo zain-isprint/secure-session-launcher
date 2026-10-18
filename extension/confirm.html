@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Application already open - Secure Session Launcher</title>
+  <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+  <div class="panel">
+    <div class="eyebrow"><img src="icons/icon32.png" alt="">Secure Session Launcher</div>
+    <h1>Conflicting Session Detected</h1>
+    <p id="summary">Loading...</p>
+    <ul id="matches"></ul>
+    <div class="note"><p id="cookieNote"></p></div>
+
+    <div class="help">
+      <p><strong>Close active session &amp; continue</strong> closes the window(s) above, clears the application's sign-in
+        data, and opens it fresh at its login page.</p>
+      <p><strong>Open parallel session</strong> keeps the open window and opens another normal window. It shares the browser's
+        cookies and storage, so applications that keep their sign-in there open already signed in as the existing user.</p>
+      <p><strong>in incognito</strong> opens the application with its own cookies and storage, at its login page. All incognito
+        windows share one session.</p>
+      <p id="incognitoNote" hidden></p>
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <div class="actions">
+      <button id="cancel" class="plain">Cancel launch</button>
+      <button id="parallel">Open parallel session</button>
+      <button id="parallelIncognito">Open parallel session in incognito</button>
+      <button id="continue" class="primary">Close active session &amp; continue</button>
+    </div>
+  </div>
+  <script src="confirm.js"></script>
+</body>
+</html>

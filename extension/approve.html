@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Approve a portal - Secure Session Launcher</title>
+  <link rel="stylesheet" href="pages.css">
+</head>
+<body>
+  <div class="panel">
+    <div class="eyebrow"><img src="icons/icon32.png" alt="">Secure Session Launcher</div>
+    <h1>Allow this portal to manage application windows?</h1>
+    <p id="question">Loading...</p>
+    <p>If you allow it, pages of this site can ask Secure Session Launcher to:</p>
+    <ul>
+      <li>open applications in new normal or incognito windows;</li>
+      <li>close application windows they opened, and clear those applications' cookies and stored data (signing you out of
+        them), when you switch user or sign out of the portal;</li>
+      <li>know which of the application windows they opened is in front.</li>
+    </ul>
+    <p class="muted">It cannot read the pages you visit or any passwords. You can remove this approval at any time in the
+      extension's options.</p>
+    <div id="error" class="error" hidden></div>
+    <div class="actions">
+      <button id="deny" class="plain">Don't allow</button>
+      <button id="allow" class="primary">Allow</button>
+    </div>
+  </div>
+  <script src="approve.js"></script>
+</body>
+</html>

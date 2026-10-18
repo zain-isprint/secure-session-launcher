@@ -1,0 +1,27 @@
+* { box-sizing: border-box; }
+:root { color-scheme: light; --accent: #126b72; --accent-dark: #0d5157; --ink: #17242c; --muted: #4a5b66; --line: #c8d4dc; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #edf2f5; color: var(--ink); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+.panel { width: min(640px, 100%); padding: 32px; background: #fff; border: 1px solid var(--line); border-top: 5px solid var(--accent); border-radius: 8px; box-shadow: 0 12px 36px #19323d1c; }
+.eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.eyebrow img { width: 18px; height: 18px; }
+h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.25; }
+h2 { margin: 24px 0 8px; font-size: 16px; }
+p { margin: 0 0 12px; }
+.muted, .help { color: var(--muted); font-size: 13px; }
+.help p { margin: 4px 0; }
+.origin { font-family: Consolas, "Courier New", monospace; font-weight: 600; word-break: break-all; }
+ul { margin: 0 0 16px; padding-left: 20px; }
+li { word-break: break-all; }
+.note { margin: 12px 0; padding: 10px 12px; border-radius: 6px; background: #f2f6f8; font-size: 14px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+button { cursor: pointer; padding: 10px 16px; font: inherit; font-size: 14px; font-weight: 600; border-radius: 4px; border: 1px solid var(--accent); background: transparent; color: var(--accent); }
+button:hover:not(:disabled) { background: #e6f1f2; }
+button.primary { background: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { background: var(--accent-dark); }
+button.plain { border-color: var(--line); color: var(--ink); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.error { margin-top: 14px; padding: 10px 12px; border-radius: 6px; background: #fff4e5; color: #7a4100; border: 1px solid #f0c48a; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 14px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e3eaee; vertical-align: middle; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+td.right { text-align: right; }

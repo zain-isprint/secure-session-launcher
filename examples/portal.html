@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Marks this page as a portal that uses Secure Session Launcher. Without it the extension stays silent. -->
+  <meta name="secure-session-launcher" content="portal">
+  <title>Secure Session Launcher: example portal</title>
+  <style>
+    body { margin: 0; padding: 24px; background: #edf2f5; color: #17242c; font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+    main { max-width: 860px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    section { margin: 16px 0; padding: 16px 20px; background: #fff; border: 1px solid #c8d4dc; border-radius: 8px; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    p { margin: 0 0 10px; }
+    .muted { color: #4a5b66; font-size: 13px; }
+    button { margin: 0 8px 8px 0; padding: 8px 14px; font: inherit; font-size: 14px; border-radius: 4px; border: 1px solid #126b72; background: #fff; color: #126b72; cursor: pointer; }
+    button.primary { background: #126b72; color: #fff; }
+    label { margin-right: 14px; font-size: 14px; }
+    #status { font-weight: 600; }
+    #log { height: 220px; overflow: auto; margin: 0; padding: 10px; background: #10232b; color: #d7f0f2; border-radius: 6px; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Example portal</h1>
+  <p class="muted">Each button calls Secure Session Launcher through <code>client/secure-session-launcher.js</code>. Results appear in the log.</p>
+
+  <section>
+    <h2>1. Extension</h2>
+    <p id="status">Not checked yet.</p>
+    <button id="hello">Check extension</button>
+    <button id="approve">Approve this portal</button>
+  </section>
+
+  <section>
+    <h2>2. Launch applications</h2>
+    <p>
+      <label>When already open
+        <select id="ifOpen"><option value="ask">ask</option><option value="close">close and continue</option></select></label>
+      <label>Window
+        <select id="window"><option value="normal">normal</option><option value="incognito">incognito</option></select></label>
+    </p>
+    <button class="primary" data-url="https://example.com/" data-app="example" data-account="alice">Example (as alice)</button>
+    <button class="primary" data-url="https://example.com/" data-app="example" data-account="bob">Example (as bob)</button>
+    <button class="primary" data-url="https://www.wikipedia.org/" data-app="wikipedia" data-account="carol">Wikipedia (as carol)</button>
+    <p class="muted">The "account" is example data: the extension keeps it with the window and returns it in window events.
+      Launch "Example" twice to see the already-open handling.</p>
+  </section>
+
+  <section>
+    <h2>3. Window events</h2>
+    <button id="subscribe">Follow the window in front</button>
+    <button id="front">Which window is in front?</button>
+    <p class="muted">After "Follow", switch between the application windows: each switch is logged with that window's data.</p>
+  </section>
+
+  <section>
+    <h2>4. Sign-out</h2>
+    <button id="signout">Sign out (close and clean up)</button>
+  </section>
+
+  <pre id="log"></pre>
+</main>
+
+<script src="../client/secure-session-launcher.js"></script>
+<script>
+  var log = document.getElementById('log');
+  function write(label, value) {
+    var line = new Date().toLocaleTimeString() + '  ' + label + (value === undefined ? '' : '  ' + JSON.stringify(value));
+    log.textContent = line + '\n' + log.textContent;
+  }
+  function report(label) {
+    return {
+      ok: function (r) { write(label + ': ok', strip(r)); return r; },
+      fail: function (e) { write(label + ': ' + (e.code || 'error'), e.message); }
+    };
+  }
+  function strip(r) { // leave out the envelope fields
+    var copy = {};
+    Object.keys(r).forEach(function (k) { if (['channel', 'type', 'requestId', 'ok'].indexOf(k) < 0) copy[k] = r[k]; });
+    return copy;
+  }
+
+  function hello() {
+    var status = document.getElementById('status');
+    var r = report('hello');
+    return SessionLauncher.hello().then(function (info) {
+      r.ok(info);
+      status.textContent = 'Secure Session Launcher ' + info.version + ' is installed. This portal is '
+        + (info.approved ? 'approved.' : 'NOT approved yet: click "Approve this portal".')
+        + (info.incognitoAllowed ? '' : ' (Incognito is not allowed for the extension.)');
+    }, function (e) {
+      r.fail(e);
+      status.textContent = e.code === 'no-extension'
+        ? 'Secure Session Launcher did not answer. Install it (Load unpacked: the extension folder) and reload this page.'
+        : e.message;
+    });
+  }
+
+  document.getElementById('hello').addEventListener('click', hello);
+
+  document.getElementById('approve').addEventListener('click', function () {
+    var r = report('requestApproval');
+    SessionLauncher.requestApproval().then(r.ok, r.fail).then(hello);
+  });
+
+  document.querySelectorAll('button[data-url]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var r = report('launch ' + button.textContent);
+      SessionLauncher.launch({
+        url: button.dataset.url,
+        app: button.dataset.app,
+        data: { account: button.dataset.account },
+        ifOpen: document.getElementById('ifOpen').value,
+        window: document.getElementById('window').value
+      }).then(r.ok, r.fail);
+    });
+  });
+
+  SessionLauncher.on('window.focused', function (e) {
+    write('event window.focused', { app: e.app, data: e.data, incognito: e.incognito, window: e.window });
+  });
+
+  document.getElementById('subscribe').addEventListener('click', function () {
+    var r = report('events.subscribe');
+    SessionLauncher.subscribe(['window.focused']).then(r.ok, r.fail);
+  });
+
+  document.getElementById('front').addEventListener('click', function () {
+    var r = report('windows.front');
+    SessionLauncher.windowInFront().then(r.ok, r.fail);
+  });
+
+  document.getElementById('signout').addEventListener('click', function () {
+    var r1 = report('signOut.prepare'), r2 = report('signOut.finish');
+    SessionLauncher.prepareSignOut().then(r1.ok, r1.fail)
+      .then(function () { return SessionLauncher.finishSignOut(); })
+      .then(r2.ok, r2.fail);
+  });
+
+  hello();
+</script>
+</body>
+</html>

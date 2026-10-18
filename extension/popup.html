@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Secure Session Launcher</title>
+  <link rel="stylesheet" href="pages.css">
+  <style>
+    body { display: block; min-height: 0; width: 340px; padding: 0; background: #fff; font-size: 14px; }
+    .popup { padding: 16px; border-top: 4px solid var(--accent); }
+    .eyebrow { margin-bottom: 12px; }
+    .site { margin: 0 0 6px; }
+    .state { margin: 0 0 12px; }
+    .actions { margin-top: 12px; }
+    .links { margin-top: 14px; font-size: 13px; }
+    .links a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="popup">
+    <div class="eyebrow"><img src="icons/icon32.png" alt="">Secure Session Launcher</div>
+    <p class="site"><span id="origin" class="origin">...</span></p>
+    <p id="state" class="state muted">Checking this page...</p>
+    <div id="error" class="error" hidden></div>
+    <div class="actions">
+      <button id="allow" class="primary" hidden>Allow this site</button>
+      <button id="remove" class="plain" hidden>Remove approval</button>
+    </div>
+    <div class="links"><a href="options.html" target="_blank">Manage approved sites</a></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

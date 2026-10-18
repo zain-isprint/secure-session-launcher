@@ -1,0 +1,8 @@
+# Packaged builds (scripts/build-zip.ps1)
+*.zip
+
+# OS and editor clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
