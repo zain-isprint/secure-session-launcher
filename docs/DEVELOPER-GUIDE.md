@@ -138,6 +138,7 @@ SessionLauncher.hello().then(function (info) {
   // info.version            e.g. "1.0.0"
   // info.approved           true when this site is approved
   // info.incognitoAllowed   true when "Allow in Incognito" is on for the extension
+  // info.separateBrowserAvailable  true when the optional Secure Session Helper is installed (1.0.3)
   if (isOlder(info.version, MIN_VERSION)) showUpdateNotice();
   if (!info.approved) showApproveButton();   // the button calls SessionLauncher.requestApproval()
 }).catch(function (e) {
@@ -195,6 +196,8 @@ expect a window to open only when they ask for one.
 | `ifOpen` | No | What to do when the application is already open: `ask` shows the extension's confirmation page; `close` closes the open window and continues without asking. |
 | `window` | No | `incognito` opens the application with its own cookies and storage. Needs "Allow in Incognito" for the extension. |
 | `closeRequestingTab` | No | `true` for a separate launch page that should disappear once the application opens. |
+| `separateBrowser` | No | Options for "Open parallel session in a separate browser". `{ waitFor: 'uso' }`: the separate window first waits until the i-Sprint USO Chrome extension is active in it, then opens the application (otherwise it opens the application at once). (1.0.6) |
+| `parallel` | No | With `ifOpen: 'ask'`: the choices the confirmation page offers besides "Close active session & continue" and "Cancel launch" (always shown). A list of `shared` (Continue without closing), `incognito` and `separate` (separate browser); `[]` offers neither. Default: all three, or the `defaultParallel` policy. A choice not offered is refused even if requested. (1.0.5) |
 
 ### A fresh start for every launch
 
@@ -224,9 +227,10 @@ The extension opens its "Conflicting Session Detected" page. It lists the open w
 
 | Choice | Effect |
 |---|---|
-| Close active session & continue | Closes the open windows without "Leave site?" prompts, clears the site's cookies and stored data, then opens the application in the `window` mode you asked for. |
-| Open parallel session | Keeps the open window and opens another normal window. It shares cookies with the open one, so most applications open already signed in as the same user. |
-| Open parallel session in incognito | Opens the application with its own cookies and storage, at its login page. All incognito windows share one session. |
+| Close active session & continue | Closes the open windows without "Leave site?" prompts, clears the site's cookies and stored data, then opens the application in the `window` mode you asked for. Windows of the application in a separate browser are closed too (1.0.4). |
+| Continue without closing | Keeps the open window and opens the application again in another normal window. It shares cookies with the open one, so most applications open already signed in as the same user: a second window of the same account, not another account. Shown in a different colour (amber) for that reason. Before 1.0.5: "Open parallel session". |
+| Open parallel session in incognito | Opens the application with its own cookies and storage, at its login page. All incognito windows share one session. Disabled when "Allow in Incognito" is off. |
+| Open parallel session in a separate browser | Opens the application in a separate window of the same browser (Chrome or Edge) with an isolated profile of its own: its own cookies, at its login page, in a normal window, and any number of them. Needs the optional Secure Session Helper (a small Windows program, see [helper/](../helper/)); disabled without it. These windows produce `window.focused` events like the others and are closed by `signOut.finish`. |
 | Cancel launch | Does nothing. |
 
 `ifOpen: 'close'` does the first choice without asking. The new window gets the `app` and `data` of
@@ -329,14 +333,15 @@ are never asked.
 {
   "approvedPortals": ["https://portal.example.com", "https://portal-test.example.com"],
   "defaultIfOpen": "ask",
+  "defaultParallel": ["incognito", "separate"],
   "defaultWindow": "normal"
 }
 ```
 
 On Windows these are set under
 `HKLM\Software\Policies\Google\Chrome\3rdparty\extensions\<extension ID>\policy`; with Google Admin
-console, under the extension's "Policy for extensions". `launch` requests may still set `ifOpen` and
-`window`; the defaults apply when they do not.
+console, under the extension's "Policy for extensions". `launch` requests may still set `ifOpen`,
+`parallel` and `window`; the defaults apply when they do not.
 
 **"Allow in Incognito"** must be turned on by each user in `chrome://extensions`, unless your Chrome
 management tools provide a way to set it. Without it, `window: 'incognito'` fails with
@@ -368,7 +373,9 @@ windows of the same application can be signed in with different accounts.
 (`uso-extension-client.js`, version 1.5 or later) does steps 2 and 3 for USOClient:
 `UsoExtension.followLaunchedWindows(SessionLauncher)` and `UsoExtension.keepAlive(SessionLauncher)`, with
 `data: { uso: [{ appId, slot }] }` on each launch. The portal page must be open with `webui` in its address,
-as the USO Chrome extension requires. Ask i-Sprint for the library and its documentation.
+as the USO Chrome extension requires. For separate-browser windows, launch with
+`separateBrowser: { waitFor: 'uso' }`, so the window opens the application once the USO Chrome extension is active
+in it. Ask i-Sprint for the library and its documentation.
 
 ## 10. Security notes
 
@@ -403,7 +410,7 @@ as the USO Chrome extension requires. Ask i-Sprint for the library and its docum
 
 | `type` | Marker | Fields | Result fields |
 |---|---|---|---|
-| `hello` | `portal`, `launch` | None | `version`, `approved`, `incognitoAllowed` |
+| `hello` | `portal`, `launch` | None | `version`, `approved`, `incognitoAllowed`, `separateBrowserAvailable` |
 | `requestApproval` | `portal`, `launch` | None | `approved` |
 | `launch` | `portal`, `launch` | `url`, `app`, `data`, `ifOpen`, `window`, `closeRequestingTab` | `outcome` |
 | `events.subscribe` | `portal` | `events`: `['window.focused']` | `events` |
@@ -432,3 +439,7 @@ as the USO Chrome extension requires. Ask i-Sprint for the library and its docum
 | Version | Changes |
 |---|---|
 | 1.0 | First public interface. |
+| 1.0 (extension 1.0.3) | `hello` adds `separateBrowserAvailable`; "Open parallel session in a separate browser" with the optional helper. No change for existing portals. |
+| 1.0 (extension 1.0.4) | Separate-browser windows count as "already open", and "Close active session & continue" closes them. |
+| 1.0 (extension 1.0.5) | `launch` takes `parallel` (which choices to offer); "Open parallel session" renamed "Continue without closing". |
+| 1.0 (extension 1.0.6) | `launch` takes `separateBrowser.waitFor`. |

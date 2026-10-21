@@ -4,7 +4,10 @@ A Chrome extension that lets a web portal open business applications in their ow
 manage those sessions safely:
 
 - open each application in its own **normal or incognito window**;
-- notice when an application is **already open**, and ask the user what to do, or close it and start again;
+- notice when an application is **already open**, and ask the user what to do, or close it and start again; the
+  portal chooses which choices the user gets;
+- open a **parallel session** in incognito, or in a **separate browser window with its own profile** (normal
+  window, isolated cookies, any number of them) with the optional Windows [helper](helper/);
 - close an application **without "Leave site?" prompts** and **clear its sign-in data** (cookies, including
   parent domains, plus localStorage, IndexedDB, caches and service workers), so the next user or account
   starts at the login page;
@@ -50,6 +53,7 @@ open" means, window events, sign-out, Chrome policies for organisations, and err
 |---|---|
 | [extension/](extension/) | The extension (Manifest V3) |
 | [client/secure-session-launcher.js](client/secure-session-launcher.js) | Client script for your portal pages (global `SessionLauncher`, or CommonJS / AMD) |
+| [helper/](helper/) | Secure Session Helper: optional Windows program for separate-browser sessions (experimental; build it from source) |
 | [docs/DEVELOPER-GUIDE.md](docs/DEVELOPER-GUIDE.md) | How to integrate the extension in a web application |
 | [examples/](examples/) | A working example portal |
 | [PRIVACY.md](PRIVACY.md) | What the extension stores, and that it sends nothing anywhere |
@@ -77,6 +81,7 @@ Windows, or `cd extension && zip -r ../secure-session-launcher.zip .` elsewhere.
 | `cookies` | Clear the sign-in cookies of an application being closed or signed out of |
 | `browsingData` | Clear that application's localStorage, IndexedDB, caches and service workers |
 | `storage` | Remember approved portals, launched windows and the sites to clean up, in the browser only |
+| `nativeMessaging` | Talk to the optional Secure Session Helper on the user's PC, if installed, to open, follow and close separate-browser windows. Chrome shows it as "Communicate with cooperating native applications". |
 | Access to `http://*/*` and `https://*/*` | Applications can be on any site; the extension clears their data and receives requests from approved portal pages |
 
 The extension acts only on requests from approved portal pages that carry the marker tag, and only on the
@@ -84,6 +89,7 @@ windows and sites those portals launched. It sends nothing to any server; see [P
 
 ## Requirements
 
-- Google Chrome, or another Chromium browser with Manifest V3 extensions.
+- Google Chrome or Microsoft Edge, or another Chromium browser with Manifest V3 extensions.
 - Portal pages served over HTTPS (or from `localhost` during development).
 - For incognito windows: "Allow in Incognito" turned on for the extension in `chrome://extensions`.
+- For separate-browser windows: Windows, and [Secure Session Helper](helper/) installed for the user.

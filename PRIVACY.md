@@ -1,7 +1,8 @@
 # Privacy
 
 Secure Session Launcher does not collect, send, sell or share any data. It has no server and makes no
-network requests of its own.
+network requests of its own. If the optional Secure Session Helper is installed on your PC, the extension talks to
+it locally (native messaging) to open, follow and close separate-browser windows; nothing leaves your PC.
 
 ## What it stores, in your browser only
 
@@ -21,3 +22,8 @@ extension clears that application's cookies (for its host and parent domains) an
 (localStorage, IndexedDB, caches, service workers). Cookies that the portal's own site also uses are never
 cleared. It never reads the content of the pages you visit; the only script it runs in an application page
 switches off that page's "Leave site?" prompt just before closing it.
+
+With Secure Session Helper, separate-browser windows use browser profiles in your user folder
+(`%LOCALAPPDATA%\SecureSessionLauncher`). Their sign-in data is deleted when the window is closed by the extension
+(close and continue, or sign-out) and before a profile is reused. The helper's logs there contain application
+addresses and process IDs.

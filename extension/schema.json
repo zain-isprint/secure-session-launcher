@@ -13,6 +13,12 @@
       "type": "string",
       "enum": ["ask", "close"]
     },
+    "defaultParallel": {
+      "title": "Choices offered when the application is already open",
+      "description": "Used when a launch request does not say: which of 'shared' (Continue without closing), 'incognito' and 'separate' (separate browser) the confirmation page offers, besides Close active session and Cancel. Default: all three.",
+      "type": "array",
+      "items": { "type": "string", "enum": ["shared", "incognito", "separate"] }
+    },
     "defaultWindow": {
       "title": "Window to open applications in",
       "description": "Used when a launch request does not say: 'normal' or 'incognito'.",

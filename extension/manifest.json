@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Secure Session Launcher",
   "short_name": "Session Launcher",
-  "description": "Open portal applications in their own windows, switch user cleanly, run parallel sessions in incognito and clean up at sign-out.",
-  "version": "1.0.2",
+  "description": "Open portal applications in their own windows, switch user cleanly, run parallel sessions in incognito or a separate browser and clean up at sign-out.",
+  "version": "1.0.6",
   "incognito": "spanning",
   "icons": {
     "16": "icons/icon16.png",
@@ -25,7 +25,8 @@
     "cookies",
     "storage",
     "scripting",
-    "browsingData"
+    "browsingData",
+    "nativeMessaging"
   ],
   "host_permissions": [
     "http://*/*",
@@ -49,5 +50,6 @@
       ],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApXgnqjQnNmS3e7AlmPiRW6GYq6rjVE8L0EdnjmdZZyDUf1V+l/21cEgTPCLHlxrGIvk9mHfNWv3SF2Wyhv/YNT9SMx/FwhljSWs0TaFsz3208oS3jDrRGH71EFy9nUgjuECOBM3IkBRs7WcJjqSOK1j7cG7AFkPP/eg27oFrJ+kJzB0HLMyGthUPg0wrBmNQVI+M9tNyHpL54G/wvWm9YMqLwwJN2uKdRsyG61jQ0FXWikGXo6bv+Huh+ArQPas8mnw99/Gzxb4/uSLhM5Ur/fmdZbW203G5ZXaWFG6PZPJXY9JW2qaD04wncFYAKkgHfjR4daM31VFSs+T95kwd0wIDAQAB"
 }

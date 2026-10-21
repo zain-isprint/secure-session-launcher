@@ -19,9 +19,13 @@ button:hover:not(:disabled) { background: #e6f1f2; }
 button.primary { background: var(--accent); color: #fff; }
 button.primary:hover:not(:disabled) { background: var(--accent-dark); }
 button.plain { border-color: var(--line); color: var(--ink); }
+/* "Continue without closing": shares the open window's sign-in, so it stands apart from the isolated choices. */
+button.alt { border-color: #b26a00; color: #8a4f00; background: #fff8ec; }
+button.alt:hover:not(:disabled) { background: #fdebd0; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 .error { margin-top: 14px; padding: 10px 12px; border-radius: 6px; background: #fff4e5; color: #7a4100; border: 1px solid #f0c48a; font-size: 14px; }
 table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 14px; }
 th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e3eaee; vertical-align: middle; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
 td.right { text-align: right; }
+[hidden] { display: none !important; }

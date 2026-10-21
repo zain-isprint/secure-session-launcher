@@ -16,10 +16,14 @@
     <div class="help">
       <p><strong>Close active session &amp; continue</strong> closes the window(s) above, clears the application's sign-in
         data, and opens it fresh at its login page.</p>
-      <p><strong>Open parallel session</strong> keeps the open window and opens another normal window. It shares the browser's
-        cookies and storage, so applications that keep their sign-in there open already signed in as the existing user.</p>
-      <p><strong>in incognito</strong> opens the application with its own cookies and storage, at its login page. All incognito
-        windows share one session.</p>
+      <p id="helpShared"><strong>Continue without closing</strong> keeps the open window and opens the application again in
+        another normal window. Both windows share this browser's sign-in, so most applications open already signed in as the
+        user of the open window: use it for a second window of the same account, not for another account.</p>
+      <p id="helpIncognito"><strong>Open parallel session in incognito</strong> opens the application with its own cookies and
+        storage, at its login page. All incognito windows share one session.</p>
+      <p id="helpSeparate"><strong>Open parallel session in a separate browser</strong> opens the application in a separate
+        browser window with its own profile: isolated like incognito, but a normal window, and any number of them. Needs the
+        optional Secure Session Helper.</p>
       <p id="incognitoNote" hidden></p>
     </div>
 
@@ -27,8 +31,9 @@
 
     <div class="actions">
       <button id="cancel" class="plain">Cancel launch</button>
-      <button id="parallel">Open parallel session</button>
+      <button id="parallel" class="alt">Continue without closing</button>
       <button id="parallelIncognito">Open parallel session in incognito</button>
+      <button id="parallelSeparate">Open parallel session in a separate browser</button>
       <button id="continue" class="primary">Close active session &amp; continue</button>
     </div>
   </div>

@@ -19,7 +19,7 @@
  *    cookies of the application's host and its parent domains are cleared (never cookies the portal's
  *    host also receives), and the origin's stored data, then the new window opens.
  *
- * 3. "Open parallel session": keeps the old tabs and opens another window, normal (shared cookies) or
+ * 3. "Continue without closing" (shared) or a parallel session: keeps the old tabs and opens another window, normal (shared cookies) or
  *    incognito (own cookies and storage).
  *
  * 4. Window events: the portal page can subscribe to "window.focused". When the user brings a tab launched
@@ -32,14 +32,38 @@
  */
 const LOG = '[Session Launcher]';
 const PENDING_PREFIX = 'pending:';            // session: request id -> launch waiting for the user's choice
+// The choices the confirmation page can offer besides "Close active session & continue" and "Cancel launch":
+// "Continue without closing" (shared), "Open parallel session in incognito", "... in a separate browser".
+const PARALLEL_CHOICES = ['shared', 'incognito', 'separate'];
 const CLOSE_PREFIX = 'closing:';              // session: request id -> "Close & continue" waiting for old tabs
-const TAB_PREFIX = 'tab:';                    // session: tab id -> { portal, app, data, origin, hostname, incognito, closing? }
+const TAB_PREFIX = 'tab:';                    // WIN: tab id -> { portal, app, data, origin, hostname, incognito, closing? }
 const SUBSCRIBERS_KEY = 'subscribers';        // session: { portal origin: tab id } receiving window events
-const LAST_FOCUSED_KEY = 'lastFocused';       // session: { portal origin: tab id } launched tab most recently in front
+const LAST_FOCUSED_KEY = 'lastFocused';       // WIN: { portal origin: tab id } launched tab most recently in front
+// The records of launched windows are kept in local storage (WIN), not session storage: Chrome restarts the
+// extension when its settings change (for example "Allow in Incognito") or it is updated, which empties session
+// storage, while the tabs, and their IDs, stay. They are cleared when Chrome itself starts (tab IDs are reused).
+const WIN = chrome.storage.local;
+chrome.runtime.onStartup.addListener(() => forgetWindowRecords(() => true));
+pruneWindowRecords();
+
+async function forgetWindowRecords(shouldForget) {
+  const all = await WIN.get(null);
+  const keys = Object.keys(all).filter(k => (k.startsWith(TAB_PREFIX) && shouldForget(Number(k.slice(TAB_PREFIX.length))))
+    || (shouldForget(-1) && (k === LAST_FOCUSED_KEY || k === 'separateSessions')));
+  if (keys.length) await WIN.remove(keys);
+}
+
+// Drops records of tabs that no longer exist (closed while the extension was stopped).
+async function pruneWindowRecords() {
+  try {
+    const open = new Set((await chrome.tabs.query({})).map(t => t.id));
+    await forgetWindowRecords(id => id >= 0 && !open.has(id));
+  } catch { /* ignore */ }
+}
 const APPROVAL_PREFIX = 'approval:';          // session: approval id -> { origin, tabId }
 const SITES_KEY = 'launchedSites';            // local: { portal origin: [application origin] } since the portal's last sign-out
 const APPROVED_KEY = 'approvedPortals';       // local: [origin] approved by the user
-const FOCUS_SETTLE_MS = 300;
+const FOCUS_SETTLE_MS = 150;
 const STAYED_CHECK_MS = 300;                  // see watchLeavePrompt()
 const STAYED_CONFIRM_MS = 700;                // see handleStayed()
 const SUPPRESS_WAIT_MS = 500;                 // see suppressLeavePrompt()
@@ -83,6 +107,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case 'cancel-launch': return reply(cancelLaunch(message.requestId));
     case 'confirm-launch': return reply(confirmLaunch(message.requestId, sender));
     case 'launch-parallel': return reply(handleParallelLaunch(message.requestId, message.incognito === true));
+    case 'launch-separate-browser': return reply(handleSeparateBrowserLaunch(message.requestId));
     case 'approval-get': return reply(getApproval(message.id));
     case 'approval-answer': return reply(answerApproval(message.id, message.allow === true));
     case 'options-get': return reply(getOptions());
@@ -105,7 +130,8 @@ async function handlePageRequest(message, sender) {
 
   if (request.type === 'hello') {
     return { version: chrome.runtime.getManifest().version, approved: await isApproved(origin),
-      incognitoAllowed: await chrome.extension.isAllowedIncognitoAccess() };
+      incognitoAllowed: await chrome.extension.isAllowedIncognitoAccess(),
+      separateBrowserAvailable: await helperAvailable() };
   }
   if (portalOnly.includes(request.type) && role !== 'portal') {
     throw new LauncherError('not-allowed-here', `"${request.type}" needs a page marked <meta name="secure-session-launcher" content="portal">.`);
@@ -237,12 +263,22 @@ async function handleLaunch(request, requesterTab, portal) {
   const incognito = windowMode === 'incognito';
   if (incognito && !(await chrome.extension.isAllowedIncognitoAccess())) throw new LauncherError('incognito-not-allowed', INCOGNITO_NOT_ALLOWED);
   const closeRequestingTab = request.closeRequestingTab === true;
+  const parallel = request.parallel !== undefined ? request.parallel : settings.defaultParallel || PARALLEL_CHOICES;
+  if (!Array.isArray(parallel) || parallel.some(choice => !PARALLEL_CHOICES.includes(choice))) {
+    throw new LauncherError('invalid-request', '"parallel" must be a list of "shared", "incognito" and "separate".');
+  }
+  // Separate-browser windows: optionally wait until a sign-on agent's extension is active before opening the application.
+  const separateBrowser = request.separateBrowser === undefined ? {} : request.separateBrowser;
+  if (!separateBrowser || typeof separateBrowser !== 'object' || ![undefined, 'uso'].includes(separateBrowser.waitFor)) {
+    throw new LauncherError('invalid-request', '"separateBrowser.waitFor" must be "uso" or left out.');
+  }
   const launch = { portal, app, data };
 
   const targetMatchUrl = matchUrl(target.href);
   const matches = await findOpenTabs(target, targetMatchUrl, portal, app, requesterTab.id);
+  const separate = await findSeparateSessions(target, targetMatchUrl, portal, app);
 
-  if (matches.length === 0) {
+  if (matches.length === 0 && separate.length === 0) {
     await freshStart(target, portal);
     await openTarget(target.href, launch, incognito);
     if (closeRequestingTab) chrome.tabs.remove(requesterTab.id).catch(() => {});
@@ -256,11 +292,14 @@ async function handleLaunch(request, requesterTab, portal) {
     hostname: target.hostname.toLowerCase(),
     matchUrl: targetMatchUrl,
     matchingTabIds: matches.map(tab => tab.id),
-    matchingUrls: matches.map(tab => tab.url),
+    matchingUrls: matches.map(tab => tab.url).concat(separate.map(s => s.url + ' (in a separate browser window)')),
+    matchingSeparate: separate.map(s => s.session),
     matchingIncognito: matches.some(tab => tab.incognito),
     stagingTabId: closeRequestingTab ? requesterTab.id : null,
     launch,
     incognito,
+    parallel: [...new Set(parallel)],
+    waitFor: separateBrowser.waitFor || null,
     portalHostname: new URL(portal).hostname.toLowerCase()
   };
   await chrome.storage.session.set({ [PENDING_PREFIX + requestId]: pending });
@@ -301,7 +340,7 @@ async function openTarget(url, launch, incognito = false) {
   const tab = win && win.tabs && win.tabs[0];
   if (tab && tab.id != null) {
     const target = new URL(url);
-    await chrome.storage.session.set({ [TAB_PREFIX + tab.id]: {
+    await WIN.set({ [TAB_PREFIX + tab.id]: {
       portal: launch.portal, app: launch.app, data: launch.data,
       origin: target.origin, hostname: target.hostname.toLowerCase(), incognito
     } });
@@ -317,7 +356,7 @@ async function openTarget(url, launch, incognito = false) {
  * becomes github.com/ after sign-in); or any tab at exactly the target URL (ignoring ?query and #fragment).
  */
 async function findOpenTabs(target, targetMatchUrl, portal, app, excludeTabId) {
-  const stored = await chrome.storage.session.get(null);
+  const stored = await WIN.get(null);
   const tabs = await chrome.tabs.query({});
   return tabs.filter(tab => {
     if (!tab.url || tab.id === excludeTabId) return false;
@@ -349,8 +388,18 @@ async function getPending(requestId) {
     matchingIncognito: pending.matchingIncognito === true,
     incognito: pending.incognito === true,
     incognitoAllowed: await chrome.extension.isAllowedIncognitoAccess(),
+    separateBrowserAvailable: await helperAvailable(),
+    parallel: pending.parallel || PARALLEL_CHOICES,
     sameAsPortalHost: pending.hostname === pending.portalHostname
   };
+}
+
+/** The pending launch, if the portal offered this choice for it (the page hides the others; this is the check). */
+async function requireOffered(requestId, choice) {
+  const pending = (await chrome.storage.session.get(PENDING_PREFIX + requestId))[PENDING_PREFIX + requestId];
+  if (!pending) throw new Error('This launch request has expired. Return to the portal and try again.');
+  if (!(pending.parallel || PARALLEL_CHOICES).includes(choice)) throw new Error('Your portal does not offer this choice.');
+  return pending;
 }
 
 async function takePending(requestId) {
@@ -379,6 +428,9 @@ async function cancelLaunch(requestId) {
  */
 async function confirmLaunch(requestId, sender) {
   const pending = await takePending(requestId);
+  // Windows of this application in a separate browser: the helper closes them and clears their sign-in data.
+  // Awaited (up to about 10 s for a window that asks "Leave site?"), so the new window opens after they are gone.
+  if (pending.matchingSeparate && pending.matchingSeparate.length) await closeSeparateSessions(pending.matchingSeparate);
   const openIds = new Set((await chrome.tabs.query({})).map(tab => tab.id));
   const waitingTabIds = (pending.matchingTabIds || []).filter(id => openIds.has(id));
 
@@ -519,20 +571,130 @@ async function abortClose(requestId, reason) {
 async function setClosing(tabIds, requestId) {
   for (const tabId of tabIds) {
     const key = TAB_PREFIX + tabId;
-    const launched = (await chrome.storage.session.get(key))[key];
+    const launched = (await WIN.get(key))[key];
     if (!launched) continue;
     if (requestId) launched.closing = requestId; else delete launched.closing;
-    await chrome.storage.session.set({ [key]: launched });
+    await WIN.set({ [key]: launched });
   }
 }
 
-/** "Open parallel session": keep the existing tabs and open another window, normal or incognito. */
+/** "Continue without closing" or "Open parallel session in incognito": keep the existing tabs and open another window, normal or incognito. */
 async function handleParallelLaunch(requestId, incognito) {
   if (incognito && !(await chrome.extension.isAllowedIncognitoAccess())) throw new Error(INCOGNITO_NOT_ALLOWED);
+  await requireOffered(requestId, incognito ? 'incognito' : 'shared');
   const pending = await takePending(requestId);
   if (pending.stagingTabId != null) await chrome.tabs.remove(pending.stagingTabId).catch(() => {});
   await openTarget(pending.targetUrl, pending.launch, incognito);
   return { opened: true };
+}
+
+/**
+ * "Open parallel session in a separate browser". The optional native helper com.isprint.ssl.parallel
+ * (Secure Session Helper) starts the same browser with an isolated profile of its own and opens the application
+ * there. Fully isolated, like incognito, but in a normal window, and any number of them. That window is not
+ * tracked by this copy of the extension: the helper reports its focus and closes it at sign-out.
+ */
+const PARALLEL_HOST = 'com.isprint.ssl.parallel';
+// The browser this launcher runs in: the separate window opens in the same one.
+const BROWSER = (navigator.userAgentData && navigator.userAgentData.brands || []).some(b => /Edge/i.test(b.brand)) || / Edg\//.test(navigator.userAgent)
+  ? 'edge' : 'chrome';
+const BROWSER_PROCESS = BROWSER === 'edge' ? 'msedge' : 'chrome';
+const HELPER_CHECK_MS = 1500;               // a helper that does not answer a ping within this time counts as missing
+
+/** True when the separate-browser helper is installed and answers. Cached for 30 s. */
+let helperCheck = { at: 0, value: false };
+async function helperAvailable() {
+  if (Date.now() - helperCheck.at < 30000) return helperCheck.value;
+  const ping = chrome.runtime.sendNativeMessage(PARALLEL_HOST, { action: 'ping' }).then(r => !!(r && r.ok), () => false);
+  const value = await Promise.race([ping, new Promise(r => setTimeout(() => r(false), HELPER_CHECK_MS))]);
+  helperCheck = { at: Date.now(), value };
+  return value;
+}
+
+const SEPARATE_KEY = 'separateSessions';   // { helper session id: { portal, app, data, url, origin } }
+let watchPort = null;
+
+/**
+ * Separate-browser sessions already open for this application: launched from the same portal for the same
+ * app on the target's site, or at exactly the target URL (as findOpenTabs does for tabs). Asks the helper which
+ * are still running, and forgets the ones the user has closed.
+ */
+async function findSeparateSessions(target, targetMatchUrl, portal, app) {
+  const sessions = (await WIN.get(SEPARATE_KEY))[SEPARATE_KEY] || {};
+  if (!Object.keys(sessions).length) return [];
+  let live;
+  try {
+    const reply = await chrome.runtime.sendNativeMessage(PARALLEL_HOST, { action: 'list' });
+    if (!reply || !reply.ok || !Array.isArray(reply.sessions)) return [];
+    live = new Set(reply.sessions);
+  } catch { return []; } // helper gone: nothing it opened can be closed through it
+  let changed = false;
+  for (const id of Object.keys(sessions)) if (!live.has(id)) { delete sessions[id]; changed = true; }
+  if (changed) await WIN.set({ [SEPARATE_KEY]: sessions });
+  return Object.entries(sessions)
+    .filter(([, s]) => s.url && (matchUrl(s.url) === targetMatchUrl
+      || (!!app && s.portal === portal && s.app === app && s.origin === target.origin)))
+    .map(([session, s]) => ({ session, url: s.url }));
+}
+
+/** Closes these separate-browser sessions through the helper (which also clears their sign-in data). */
+async function closeSeparateSessions(ids) {
+  try {
+    const reply = await chrome.runtime.sendNativeMessage(PARALLEL_HOST, { action: 'closeSession', sessions: ids });
+    console.log(LOG, `Closed ${(reply && reply.closed) || 0} separate-browser window(s) before relaunching.`);
+  } catch (error) {
+    console.warn(LOG, 'Separate-browser windows not closed:', error.message);
+  }
+  const sessions = (await WIN.get(SEPARATE_KEY))[SEPARATE_KEY] || {};
+  ids.forEach(id => delete sessions[id]);
+  await WIN.set({ [SEPARATE_KEY]: sessions });
+  if (!Object.keys(sessions).length && watchPort) { watchPort.disconnect(); watchPort = null; }
+}
+
+// While separate-browser sessions are open, keep a connection to the helper: it reports when one of their windows
+// comes to the front, and the portal gets the usual window.focused event for it (with the data given at launch).
+function ensureWatching() {
+  if (watchPort) return;
+  watchPort = chrome.runtime.connectNative(PARALLEL_HOST);
+  watchPort.onMessage.addListener(msg => {
+    if (msg && msg.event === 'focused') emitSeparateFocus(msg.session).catch(() => {});
+    // A normal Chrome window is in front again. Chrome may not report it (it never saw the focus go to the other
+    // Chrome), so report this Chrome's current window to the portal again.
+    if (msg && (msg.event === 'chromeFront' || (msg.event === 'browserFront' && msg.name === BROWSER_PROCESS))) {
+      // Straight away: the helper only reports settled changes of the window in front.
+      chrome.tabs.query({ active: true, lastFocusedWindow: true }).then(([tab]) => { if (tab) emitFocus(tab.id).catch(() => {}); }).catch(() => {});
+    }
+  });
+  watchPort.onDisconnect.addListener(() => { watchPort = null; });
+  watchPort.postMessage({ action: 'watch' });
+}
+
+async function emitSeparateFocus(session) {
+  const sessions = (await WIN.get(SEPARATE_KEY))[SEPARATE_KEY] || {};
+  const info = sessions[session];
+  if (!info) return;
+  await sendFocusEvent(info.portal, { app: info.app || null, data: info.data === undefined ? null : info.data, incognito: false, window: 's' + session });
+  console.log(LOG, `Separate-browser window ${session} is in front.`);
+}
+
+async function handleSeparateBrowserLaunch(requestId) {
+  const pending = await requireOffered(requestId, 'separate');
+  let reply;
+  try {
+    reply = await chrome.runtime.sendNativeMessage(PARALLEL_HOST, { action: 'open', url: pending.targetUrl, portal: pending.launch.portal, browser: BROWSER, waitFor: pending.waitFor || undefined });
+  } catch (error) {
+    throw new Error('The separate-browser helper is not installed or did not start (' + error.message + ').');
+  }
+  if (!reply || !reply.ok) throw new Error('The separate-browser helper refused: ' + ((reply && reply.error) || 'no answer'));
+  await takePending(requestId);
+  if (pending.stagingTabId != null) await chrome.tabs.remove(pending.stagingTabId).catch(() => {});
+  const sessions = (await WIN.get(SEPARATE_KEY))[SEPARATE_KEY] || {};
+  sessions[reply.session] = { portal: pending.launch.portal, app: pending.launch.app, data: pending.launch.data,
+    url: pending.targetUrl, origin: new URL(pending.targetUrl).origin };
+  await WIN.set({ [SEPARATE_KEY]: sessions });
+  ensureWatching();
+  console.log(LOG, `Opened ${pending.targetUrl} in a separate browser (session ${reply.session}).`);
+  return { opened: true, session: reply.session };
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -595,7 +757,7 @@ async function setLaunchedSites(portal, origins) {
  * ------------------------------------------------------------------------------------------- */
 
 async function launchedTabsOf(portal) {
-  const stored = await chrome.storage.session.get(null);
+  const stored = await WIN.get(null);
   return (await chrome.tabs.query({})).map(tab => ({ tab, info: stored[TAB_PREFIX + tab.id] }))
     .filter(x => x.info && x.info.portal === portal);
 }
@@ -650,7 +812,16 @@ async function finishSignOut(portal) {
     await clearSiteStorage(origin).catch(error => console.warn(LOG, 'Storage clear skipped:', error));
   }
   await setLaunchedSites(portal, [...keptOrigins].filter(Boolean)); // still open: cleared at the next sign-out
-  return { closed: ids.length - open.length, kept: open.length, cookiesCleared };
+  // The windows opened in a separate browser are closed by the helper that opened them.
+  let isolated = null;
+  try { isolated = await chrome.runtime.sendNativeMessage(PARALLEL_HOST, { action: 'closeSessions', portal }); }
+  catch { /* helper not installed */ }
+  if (isolated && isolated.closed) console.log(LOG, `Closed ${isolated.closed} separate-browser window(s) for ${portal}.`);
+  const sessions = (await WIN.get(SEPARATE_KEY))[SEPARATE_KEY] || {};
+  for (const id of Object.keys(sessions)) if (sessions[id].portal === portal) delete sessions[id];
+  await WIN.set({ [SEPARATE_KEY]: sessions });
+  if (!Object.keys(sessions).length && watchPort) { watchPort.disconnect(); watchPort = null; }
+  return { closed: ids.length - open.length + ((isolated && isolated.closed) || 0), kept: open.length, cookiesCleared };
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -674,7 +845,7 @@ function describeWindow(tabId, info) {
 }
 
 async function windowsFront(portal) {
-  const stored = await chrome.storage.session.get(null);
+  const stored = await WIN.get(null);
   let front = null, last = null;
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }).catch(() => []);
   const frontInfo = tab && stored[TAB_PREFIX + tab.id];
@@ -703,19 +874,23 @@ function scheduleFocus(tabId) {
 }
 
 async function emitFocus(tabId) {
-  const stored = await chrome.storage.session.get(null);
+  const stored = await WIN.get(null);
   const info = stored[TAB_PREFIX + tabId];
   if (!info || info.closing) return; // not launched by a portal, or being closed
   const lastFocused = stored[LAST_FOCUSED_KEY] || {};
   lastFocused[info.portal] = tabId;
-  await chrome.storage.session.set({ [LAST_FOCUSED_KEY]: lastFocused });
-  const subscriber = (stored[SUBSCRIBERS_KEY] || {})[info.portal];
+  await WIN.set({ [LAST_FOCUSED_KEY]: lastFocused });
+  await sendFocusEvent(info.portal, describeWindow(tabId, info));
+}
+
+async function sendFocusEvent(portal, payload) {
+  const subscriber = ((await chrome.storage.session.get(SUBSCRIBERS_KEY))[SUBSCRIBERS_KEY] || {})[portal];
   if (subscriber == null) return;
-  const event = Object.assign({ kind: 'event', event: 'window.focused' }, describeWindow(tabId, info));
+  const event = Object.assign({ kind: 'event', event: 'window.focused' }, payload);
   await chrome.tabs.sendMessage(subscriber, event).catch(async () => {
     // The subscribing page has gone (closed, navigated or reloading without subscribing again).
     const subscribers = (await chrome.storage.session.get(SUBSCRIBERS_KEY))[SUBSCRIBERS_KEY] || {};
-    if (subscribers[info.portal] === subscriber) { delete subscribers[info.portal]; await chrome.storage.session.set({ [SUBSCRIBERS_KEY]: subscribers }); }
+    if (subscribers[portal] === subscriber) { delete subscribers[portal]; await chrome.storage.session.set({ [SUBSCRIBERS_KEY]: subscribers }); }
   });
 }
 
@@ -724,7 +899,7 @@ async function emitFocus(tabId) {
  * ------------------------------------------------------------------------------------------- */
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.session.remove(TAB_PREFIX + tabId).catch(() => {});
+  WIN.remove(TAB_PREFIX + tabId).catch(() => {});
   chrome.storage.session.get(null).then(stored => {
     const subscribers = stored[SUBSCRIBERS_KEY] || {};
     const left = Object.fromEntries(Object.entries(subscribers).filter(([, id]) => id !== tabId));
